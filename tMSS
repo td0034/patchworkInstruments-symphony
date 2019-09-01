@@ -1,0 +1,501 @@
+int channel = 1;
+int orchestra[6][6];
+int note = 36;
+long period = 500;
+long periodMicros = 0;
+int bpm = 0;
+long bpmMicros = 0;
+float durationMS = 0;
+float durationS = 0;
+int durationM = 0;
+int durS = 0;
+float seconds = 0;
+int printInterval = 4000;
+int tempPrintInterval = 0;
+int relationChangeInterval = 0;
+int tempRelationChangeInterval = 0;
+int noteChangeInterval = 32000;
+int tempNoteChangeInterval = 0;
+int led = 13;
+int relation = 1;
+int noteInterval = 12;
+int barsDuration = period*4;
+int rootNote = 0;
+char noteLetter = '0';
+unsigned long previousMillis = 0;
+unsigned long previousMillis2 = 0;
+unsigned long previousMillis3 = 0;
+
+//Pin connected to ST_CP of 74HC595
+int latchPin = 8;
+//Pin connected to SH_CP of 74HC595
+int clockPin = 12;
+////Pin connected to DS of 74HC595
+int dataPin = 11;
+
+//holders for infromation you're going to pass to shifting function
+byte dataRED;
+byte dataGREEN;
+byte dataArrayRED[10];
+byte dataArrayGREEN[10];
+byte alphabet[100];
+
+
+/// midi control dials
+const int analogInPin1 = A12;
+int sensorValue1 = 0;        // value read from the pot 
+const int analogInPin2 = A13;
+int sensorValue2 = 0;
+const int analogInPin3 = A14;
+int sensorValue3 = 0;
+const int analogInPin4 = A15;
+int sensorValue4 = 0;
+const int analogInPin5 = A16;
+int sensorValue5 = 0;
+
+void setup() 
+{
+ Serial.begin(20000000);
+    pinMode(led, OUTPUT);
+    pinMode(latchPin, OUTPUT);
+
+      //Arduino doesn't seem to have a way to write binary straight into the code 
+    //so these values are in HEX.  Decimal would have been fine, too. 
+    dataArrayRED[0] = 0x3F; //11111111
+    dataArrayRED[1] = 0x06; //11111110
+    dataArrayRED[2] = 0x5B; //11111100
+    dataArrayRED[3] = 0x4F; //11111000
+    dataArrayRED[4] = 0x66; //11110000
+    dataArrayRED[5] = 0x6D; //11100000
+    dataArrayRED[6] = 0x7D; //11000000
+    dataArrayRED[7] = 0x07; //10000000
+    dataArrayRED[8] = 0x7F; //00000000
+    dataArrayRED[9] = 0x6F; //11100000
+  
+    //Arduino doesn't seem to have a way to write binary straight into the code 
+    //so these values are in HEX.  Decimal would have been fine, too. 
+    dataArrayGREEN[0] = 0x3F; //11111111
+    dataArrayGREEN[1] = 0x06; //01111111
+    dataArrayGREEN[2] = 0x5B; //00111111
+    dataArrayGREEN[3] = 0x4F; //00011111
+    dataArrayGREEN[4] = 0x66; //00001111
+    dataArrayGREEN[5] = 0x6D; //00000111
+    dataArrayGREEN[6] = 0x7D; //00000011
+    dataArrayGREEN[7] = 0x07; //00000001
+    dataArrayGREEN[8] = 0x7F; //00000000
+    dataArrayGREEN[9] = 0x6F; //00000111
+
+    //aplhabet[1] = 0x00;        //a
+    alphabet[8] = 0x30;       //I.
+    alphabet[15] = 0x73;      //P.
+  
+    //function that blinks all the LEDs
+    //gets passed the number of blinks and the pause time
+    blinkAll_2Bytes(3,50); 
+
+    digitalWrite(latchPin, 0);
+    shiftOut(dataPin, clockPin, alphabet[15]);   
+    shiftOut(dataPin, clockPin, alphabet[8]);
+    //return the latch pin high to signal chip that it 
+    //no longer needs to listen for information
+    digitalWrite(latchPin, 1);
+    delay(250);
+ 
+    for (int i = 0; i < 6; i = i + 1)
+    {
+      for (int j = 0; j < 6; j = j + 1)
+      { 
+        //generate eiher a 0 or 1
+        //orchestra[i][j] = random(0,2);
+        orchestra[i][j] = 0;
+      }      
+    }
+ 
+}
+
+void loop() 
+{
+
+  unsigned long currentMillis = micros();
+
+  periodMicros = period * 1000;
+
+  if (currentMillis - previousMillis >= periodMicros) 
+  {
+  // save the last time you blinked the LED
+  previousMillis = currentMillis;
+  
+  usbMIDI.sendRealTime(usbMIDI.Clock);
+  usbMIDI.send_now();
+  } 
+
+  if (currentMillis - previousMillis2 >= periodMicros*24) 
+  {
+  // save the last time you blinked the LED
+  previousMillis2 = currentMillis;
+  digitalWrite(led, HIGH);
+  delay(1);
+  digitalWrite(led, LOW);
+  }
+
+  if (currentMillis - previousMillis3 >= periodMicros) 
+  {
+    // save the last time you blinked the LED
+    previousMillis3 = currentMillis;
+    /*
+    if (note > 132)
+    {
+    note = note-120;
+    }
+    else note = note + 12;
+    */
+  
+    sensorValue1 = analogRead(analogInPin1);
+    relationChangeInterval = map(sensorValue1, 0, 1023, 1, 8);
+    relationChangeInterval = relationChangeInterval*relationChangeInterval*2000;
+  
+    sensorValue2 = analogRead(analogInPin2);
+    // Lowest BPM = 3000ms = 0.333Hz = 20 BPM
+    // Highest BPM = 60ms = 16.5Hz = 999 BPM
+    period = map(sensorValue2, 0, 1023, 10, 3000);
+    //period = period*period;
+    //bpm = period;
+    barsDuration = period*4;
+    
+    sensorValue3 = analogRead(analogInPin3);
+    note = map(sensorValue3, 0, 1023, 0, 120);
+
+    //sensorValue4 = analogRead(analogPin4);
+    //noteInterval = map(sensorValue3, 0, 1023, 0, 12);
+  
+  
+    if (tempRelationChangeInterval >= relationChangeInterval)
+    {
+    relation = relation + 1;  
+    tempRelationChangeInterval = 0;
+      if (relation == 8)
+      {
+        relation = 1;
+      }
+    }
+    else
+    {
+      tempRelationChangeInterval = tempRelationChangeInterval + period;
+    }
+    
+    if(tempPrintInterval >= printInterval || tempPrintInterval == 0)
+    {    
+      Serial.print("relationint:\t");
+      Serial.print(relationChangeInterval);
+      Serial.println(" ms");
+      Serial.print("relation:\tNo. ");
+      Serial.print(relation);
+      Serial.println();
+      Serial.print("period:\t\t");
+      Serial.print(period);
+      Serial.println(" ms");
+      Serial.print("currentNote:\t");
+      Serial.print(note);
+      Serial.println(" semi-tones");
+      Serial.print("time:\t\t");
+      Serial.print(durationM);
+      Serial.print(":");
+      Serial.print(seconds);
+      Serial.println();
+      Serial.println();
+      for (int i = 0; i < 6; i = i + 1)
+      {
+        for (int j = 0; j < 6; j = j + 1)
+        {
+          Serial.print("    ");
+          Serial.print(orchestra[i][j]);
+        }  
+        Serial.println();
+        Serial.println();
+      }
+  
+      tempPrintInterval = 0;
+    }
+    else
+    {
+      tempPrintInterval = tempPrintInterval + period;
+    }
+      
+  
+      int adjustX = random(0,6);
+      int adjustY = random(0,6);
+      
+      if (adjustX == 1 && adjustY == 1)
+      {
+        channel = 17;
+      }
+      if (adjustX == 1 && adjustY == 2)
+      {
+        channel = 2;
+      }
+      if (adjustX == 1 && adjustY == 3)
+      {
+        channel = 3;
+      }
+      if (adjustX == 1 && adjustY == 4)
+      {
+        channel = 4;
+      }
+      if (adjustX == 2 && adjustY == 1)
+      {
+        channel = 5;
+      }
+      if (adjustX == 2 && adjustY == 2)
+      {
+        channel = 6;
+      }
+      if (adjustX == 2 && adjustY == 3)
+      {
+        channel = 7;
+      }
+      if (adjustX == 2 && adjustY == 4)
+      {
+        channel = 8;
+      }
+      if (adjustX == 3 && adjustY == 1)
+      {
+        channel = 9;
+      }
+      if (adjustX == 3 && adjustY == 2)
+      {
+        channel = 10;
+      }
+      if (adjustX == 3 && adjustY == 3)
+      {
+        channel = 11;
+      }
+      if (adjustX == 3 && adjustY == 4)
+      {
+        channel = 12;
+      }
+      if (adjustX == 4 && adjustY == 1)
+      {
+        channel = 13;
+      }
+      if (adjustX == 4 && adjustY == 2)
+      {
+        channel = 14;
+      }
+      if (adjustX == 4 && adjustY == 3)
+      {
+        channel = 15;
+      }
+      if (adjustX == 4 && adjustY == 4)
+      {
+        channel = 16;
+      }
+  
+      switch (relation)
+      {
+        case 1:
+          // play only if all immediate neighbours aren't playing
+          //
+          //  0 0 0             0 0 0
+          //  0 0 0   - - - >   0 1 0
+          //  0 0 0             0 0 0
+          //
+          if (orchestra[adjustX][adjustY] == 0 && orchestra[adjustX-1][adjustY] == 0 && orchestra[adjustX+1][adjustY] == 0 && orchestra[adjustX][adjustY+1] == 0 && orchestra[adjustX][adjustY-1] == 0 && orchestra[adjustX-1][adjustY-1] == 0 && orchestra[adjustX+1][adjustY-1] == 0 && orchestra[adjustX-1][adjustY+1] == 0 && orchestra[adjustX+1][adjustY+1] == 0)
+          {
+            orchestra[adjustX][adjustY] = 1;
+            usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+          }
+          else 
+          {
+            orchestra[adjustX][adjustY] = 0;
+            usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+          }
+          break;
+        case 2:
+          // play only if left, right, upper & lower neighbours aren't playing
+          //
+          //    0                 0 
+          //  0 0 0   - - - >   0 1 0
+          //    0                 0 
+          //
+          if (orchestra[adjustX][adjustY] == 0  && orchestra[adjustX-1][adjustY-1] == 0 && orchestra[adjustX+1][adjustY-1] == 0 && orchestra[adjustX-1][adjustY+1] == 0 && orchestra[adjustX+1][adjustY+1] == 0)
+            {
+            orchestra[adjustX][adjustY] = 1;
+            usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            else 
+            {
+              orchestra[adjustX][adjustY] = 0;
+              usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+            }
+            break;
+        case 3:
+          // play if diagonally local neighbours aren't playing
+          //
+          //  0   0             0   0
+          //    0     - - - >     1 
+          //  0   0             0   0
+          //
+          if (orchestra[adjustX][adjustY] == 0 && orchestra[adjustX-1][adjustY] == 0 && orchestra[adjustX+1][adjustY] == 0 && orchestra[adjustX][adjustY+1] == 0 && orchestra[adjustX][adjustY-1] == 0)
+            {
+              orchestra[adjustX][adjustY] = 1;
+              usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            else 
+            {
+              orchestra[adjustX][adjustY] = 0;
+              usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+            }
+            break;
+        case 4:
+          // play if left neighbour isn't playing
+          //
+          //                       
+          //    0 0   - - - >     0 1 
+          //                       
+          //
+          if (orchestra[adjustX][adjustY] == 0 && orchestra[adjustX-1][adjustY] == 0)
+            {
+              orchestra[adjustX][adjustY] = 1;
+              usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            else 
+            {
+              orchestra[adjustX][adjustY] = 0;
+              usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+            }
+            break;
+         case 5:
+          // play if left upper isn't playing
+          //
+          //      0                 0 
+          //      0     - - - >     1 
+          //                       
+          //
+          if (orchestra[adjustX][adjustY] == 0 && orchestra[adjustX][adjustY+1] == 0)
+            {
+              orchestra[adjustX][adjustY] = 1;
+              usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            else 
+            {
+              orchestra[adjustX][adjustY] = 0;
+              usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+            }
+            break;
+        case 6:
+          // play if previously not playing
+          //
+          //                        
+          //      0     - - - >     1 
+          //                       
+          //
+          if (orchestra[adjustX][adjustY] == 0)
+            {
+              orchestra[adjustX][adjustY] = 1;
+              usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            else 
+            {
+              orchestra[adjustX][adjustY] = 0;
+              usbMIDI.sendNoteOff(note, 99, channel);  // 60 = C4
+            }
+            break;
+        case 7:
+          // play 
+          //
+          //                        
+          //      0     - - - >     1 
+          //                       
+          //
+          if (orchestra[adjustX][adjustY] == 0)
+            {
+              orchestra[adjustX][adjustY] = 1;
+              usbMIDI.sendNoteOn(note, 99, channel);  // 60 = C4
+            }
+            break;        
+      }
+  
+    durationMS = durationMS + (period);
+    durationS = durationMS/1000;
+    durationM = durationS/60;
+    durS = durationM*60;
+    seconds = durationS - durS;  
+
+    // MIDI Controllers should discard incoming MIDI messages.
+    while (usbMIDI.read()) 
+    {  
+      // nothing 
+    }
+  } 
+}
+
+void shiftOut(int myDataPin, int myClockPin, byte myDataOut) {
+  // This shifts 8 bits out MSB first, 
+  //on the rising edge of the clock,
+  //clock idles low
+
+  //internal function setup
+  int i=0;
+  int pinState;
+  pinMode(myClockPin, OUTPUT);
+  pinMode(myDataPin, OUTPUT);
+
+  //clear everything out just in case to
+  //prepare shift register for bit shifting
+  digitalWrite(myDataPin, 0);
+  digitalWrite(myClockPin, 0);
+
+  //for each bit in the byte myDataOut�
+  //NOTICE THAT WE ARE COUNTING DOWN in our for loop
+  //This means that %00000001 or "1" will go through such
+  //that it will be pin Q0 that lights. 
+  for (i=7; i>=0; i--)  {
+    digitalWrite(myClockPin, 0);
+
+    //if the value passed to myDataOut and a bitmask result 
+    // true then... so if we are at i=6 and our value is
+    // %11010100 it would the code compares it to %01000000 
+    // and proceeds to set pinState to 1.
+    if ( myDataOut & (1<<i) ) {
+      pinState= 1;
+    }
+    else {  
+      pinState= 0;
+    }
+
+    //Sets the pin to HIGH or LOW depending on pinState
+    digitalWrite(myDataPin, pinState);
+    //register shifts bits on upstroke of clock pin  
+    digitalWrite(myClockPin, 1);
+    //zero the data pin after shift to prevent bleed through
+    digitalWrite(myDataPin, 0);
+  }
+
+  //stop shifting
+  digitalWrite(myClockPin, 0);
+}
+
+
+//blinks the whole register based on the number of times you want to 
+//blink "n" and the pause between them "d"
+//starts with a moment of darkness to make sure the first blink
+//has its full visual effect.
+void blinkAll_2Bytes(int n, int d) {
+  digitalWrite(latchPin, 0);
+  shiftOut(dataPin, clockPin, 0);
+  shiftOut(dataPin, clockPin, 0);
+  digitalWrite(latchPin, 1);
+  delay(200);
+  for (int x = 0; x < n; x++) {
+    digitalWrite(latchPin, 0);
+    shiftOut(dataPin, clockPin, 255);
+    shiftOut(dataPin, clockPin, 255);
+    digitalWrite(latchPin, 1);
+    delay(d);
+    digitalWrite(latchPin, 0);
+    shiftOut(dataPin, clockPin, 0);
+    shiftOut(dataPin, clockPin, 0);
+    digitalWrite(latchPin, 1);
+    delay(d);
+  }
+}
